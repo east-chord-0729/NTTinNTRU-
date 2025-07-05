@@ -175,6 +175,7 @@ $Z_q$를 모듈로 $q$인 정수 환이라고 하고, $n-1$이 $G(x)$와 $H(x)$�
 \end{equation}
 $\psi^2 \equiv \omega \pmod q$이므로, 다음과 같이 위 방정식에 $\omega = \psi^2$를 대입할 수 있다.
 \begin{equation}
+    \label{equ:ntt_psi_omega}
     \hat{a}_j = \sum_{i=0}^{n-1} \psi^{2ij+i} a_i \pmod q.
 \end{equation}
 \end{definition}
@@ -190,6 +191,7 @@ NTT 벡터 $\mathbf{\hat{a}}$의 음의 랩핑된 INTT(Negative-Wrapped INTT, $\
 \end{equation}
 $\omega = \psi^2$를 대입하면 다음을 얻는다.
 \begin{equation}
+    \label{equ:intt_psi_omega}
     a_i = n^{-1}\sum_{j=0}^{n-1} \psi^{-(2ij+j)}\hat{a}_j \bmod q.
 \end{equation}
 \end{definition}
@@ -261,3 +263,163 @@ NTT 변환에 필요한 행렬 곱셈의 복잡도를 줄이고 과정을 빠르
 \text{symmetry} &: \psi^{k+n} = -\psi^k.
 \end{align*}
 여기서 $k$는 음이 아닌 정수이다. $n$ 포인트 NTT 및 INTT의 계산은 두 개의 $n/2$ 포인트로 나눌 수 있다. 그러나 NTT 및 INTT의 분할 기법은 약간 다르다.
+
+\subsection{Cooley-Tukey (CT) Algorithm for Fast-NTT}
+\label{sec:ct_algorithm}
+
+방정식 \ref{equ:ntt_psi_omega}로부터, 합산 인덱스 패리티(summation index parity)에 기반하여 합을 두 부분으로 분리할 수 있다.
+\begin{equation}
+\begin{split}
+\label{equ:ntt_split}
+\hat{a}_j &= \sum_{i=0}^{n-1} \psi^{2ij+i} a_i \bmod q \\
+&= \sum_{i=0}^{n/2-1} \psi^{2j(2i)+2i} a_{2i} + \sum_{i=0}^{n/2-1} \psi^{2j(2i+1)+2i+1} a_{2i+1} \bmod q \\
+&= \sum_{i=0}^{n/2-1} \psi^{4ij+2i} a_{2i} + \psi^{2j+1} \sum_{i=0}^{n/2-1} \psi^{4ij+2i} a_{2i+1} \bmod q.
+\end{split}
+\end{equation}
+
+$\psi$의 대칭성에 기반하여, 다음을 만족한다.
+\begin{equation}
+\label{equ:ntt_split_symmetry}
+\begin{split}
+\hat{a}_{j+n/2} &= \sum_{i=0}^{n-1} \psi^{2i(j+n/2)+i} a_i \bmod q \\
+&= \sum_{i=0}^{n-1} \psi^{2ij+in+i} a_i \bmod q \\
+&= \sum_{i=0}^{n/2-1} \psi^{2j(2i)+(2i)n+2i} a_{2i} + \sum_{i=0}^{n/2-1} \psi^{2j(2i+1)+(2i+1)n+2i+1} a_{2i+1} \bmod q \\
+&= \sum_{i=0}^{n/2-1} \psi^{4ij+2i} a_{2i} - \psi^{2j+1} \sum_{i=0}^{n/2-1} \psi^{4ij+2i+1} a_{2i+1} \bmod q.
+\end{split}
+\end{equation}
+
+$A_j = \sum_{i=0}^{n/2-1} \psi^{4ij+2i} a_{2i}$이고 $B_j = \sum_{i=0}^{n/2-1} \psi^{4ij+2i} a_{2i+1}$라고 하면, 방정식 \ref{equ:ntt_split}과 \ref{equ:ntt_split_symmetry}은 다음과 같이 된다.
+\begin{equation}
+\begin{split}
+\label{equ:ntt_split_butterfly}
+\hat{a}_j &= A_j + \psi^{2j+1} B_j \bmod q \\
+\hat{a}_{j+n/2} &= A_j - \psi^{2j+1} B_j \bmod q.
+\end{split}
+\end{equation}
+
+$A_j$와 $B_j$가 $n/2$ 포인트 NTT로 얻어질 수 있다는 점에 주목하자. 만약 $n$이 2의 거듭제곱이라면, 이 과정은 모든 계수에 대해 반복될 수 있다. 그림 \ref{fig:ct_butterfly}는 방정식 \ref{equ:ntt_split_butterfly}의 시각화를 보여주며, 이는 제안자인 쿨리와 튜키를 참조하여 일반적으로 \textbf{CT 버터플라이(CT butterfly)}라고 불린다.
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+    \node (A) at (0, 0.5) {$A$};
+    \node (B) at (0, -0.5) {$B$};
+    \coordinate (A_1) at (1, 0.5);
+    \coordinate (A_2) at (2, 0.5);
+    \coordinate (A_3) at (3, 0.5);
+    \coordinate (B_1) at (1, -0.5);
+    \coordinate (B_2) at (2, -0.5);
+    \coordinate (B_3) at (3, -0.5);
+    \draw (A) -- (A_1);
+    \draw (A_1) -- (B_2);
+    \draw (B_2) -- (B_3);
+    \draw (B) -- (B_1);
+    \draw (B_1) -- (A_2);
+    \draw (A_2) -- (A_3);
+    \node at ([yshift=6pt]A_2) {$+$};
+    \node at ([yshift=-6pt]B_2) {$-$};
+    \node at ([yshift=-6pt]B_1) {$\psi^k$};
+\end{tikzpicture}
+\caption{Cooley-Tukey (CT) butterfly unit for calculating NTT}
+\label{fig:ct_butterfly}
+\end{figure}
+
+전체 $n$ 길이 NTT를 계산하기 위해 여러 버터플라이 유닛을 구성할 수 있다.
+
+CT 버터플라이 결과의 순서는 \textbf{비트 역순(bit-reversed order, BO)}이라고 불리는 반면, NTT의 올바른 순서는 \textbf{정상 순서(normal order, NO)}라고 불린다. 순서화에 대해서는 향후 더 자세히 논의할 것이다.
+
+그러나 INTT를 계산하기 위해서는 또 다른 유사한 ``분할 정복'' 접근 방식이 필요하다.
+
+\subsection{Gentleman-Sande (GS) Algorithm for Fast-INTT}
+\label{sec:gs_algorithm}
+
+INTT의 경우, 합산을 인덱스 패리티로 나누는 대신, 합산의 하위 절반과 상위 절반으로 분리한다. 방정식 \ref{equ:intt_psi_omega}에서 $n^{-1}$ 항을 무시하면 다음을 만족한다.
+\begin{equation}
+\begin{split}
+a_i &= \sum_{j=0}^{n-1} \psi^{-(2i+1)j}\hat{a}_j \bmod q \\
+&= \left[ \sum_{j=0}^{\frac{n}{2}-1} \psi^{-(2i+1)j}\hat{a}_j + \sum_{j=\frac{n}{2}}^{n-1} \psi^{-(2i+1)j}\hat{a}_j \right] \bmod q \\
+&= \psi^{-i} \left[ \sum_{j=0}^{\frac{n}{2}-1} \psi^{-2ij}\hat{a}_j + \sum_{j=\frac{n}{2}}^{n-1} \psi^{-2ij}\hat{a}_j \right] \bmod q \\
+&= \psi^{-i} \left[ \sum_{j=0}^{\frac{n}{2}-1} \psi^{-2ij}\hat{a}_j + \sum_{j=0}^{\frac{n}{2}-1} \psi^{-2i(j+\frac{n}{2})}\hat{a}_{j+\frac{n}{2}} \right] \bmod q.
+\end{split}
+\end{equation}
+
+$\psi^{-1}$의 주기성 및 대칭성에 기반하여, 짝수 항에 대해 다음을 만족한다.
+\begin{equation}
+\label{equ:intt_split_even}
+\begin{split}
+a_{2i} &= \psi^{-2i} \left[ \sum_{j=0}^{\frac{n}{2}-1} \psi^{-4ij}\hat{a}_j + \sum_{j=0}^{\frac{n}{2}-1} \psi^{-4i(j+\frac{n}{2})}\hat{a}_{(j+\frac{n}{2})} \right] \bmod q \\
+a_{2i} &= \psi^{-2i} \sum_{j=0}^{\frac{n}{2}-1} \left[ \hat{a}_j + \hat{a}_{(j+\frac{n}{2})} \right] \psi^{-4ij} \bmod q.
+\end{split}
+\end{equation}
+
+홀수 항에 대해 동일한 유도를 수행하면 다음을 얻는다. \textcolor{red}{이 식 유도가 잘 안됨. 마지막 식은 맞음.}
+\begin{equation}
+\label{equ:intt_split_odd}
+\begin{split}
+a_{2i+1} &= \psi^{-(2i+1)} \left[ \sum_{j=0}^{\frac{n}{2}-1} \psi^{-2j(2i+1)}\hat{a}_j + \sum_{j=0}^{\frac{n}{2}-1} \psi^{-2(2i+1)(j+\frac{n}{2})}\hat{a}_{(j+\frac{n}{2})} \right] \bmod q \\
+&= \psi^{-(2i+1)} \left[ \sum_{j=0}^{\frac{n}{2}-1} \psi^{-4ij-2j}\hat{a}_j + \sum_{j=0}^{\frac{n}{2}-1} \psi^{-4ij-2ni-2j-n}\hat{a}_{(j+\frac{n}{2})} \right] \bmod q \\
+&= \psi^{-(2i+1)} \left[ \sum_{j=0}^{\frac{n}{2}-1} \psi^{-4ij-2j}\hat{a}_j - \sum_{j=0}^{\frac{n}{2}-1} \psi^{-4ij-2j}\hat{a}_{(j+\frac{n}{2})} \right] \bmod q \\
+&= \psi^{-(2i+1)} \sum_{j=0}^{\frac{n}{2}-1} \left[ \hat{a}_j - \hat{a}_{(j+\frac{n}{2})} \right] \psi^{-2j(2i+1)} \pmod q \\
+&= \psi^{-2i} \sum_{j=0}^{\frac{n}{2}-1} \left[ \hat{a}_j - \hat{a}_{(j+\frac{n}{2})} \right] \psi^{-4ij} \pmod q.
+\end{split}
+\end{equation}
+
+$A_i = \sum_{j=0}^{\frac{n}{2}-1} \hat{a}_j \psi^{-4ij}$이고 $B_i = \sum_{j=0}^{\frac{n}{2}-1} \hat{a}_{j+\frac{n}{2}} \psi^{-4ij}$라고 하면, 방정식 \ref{equ:intt_split_even}과 \ref{equ:intt_split_odd}는 다음과 같이 된다.
+\begin{equation}
+\label{equ:intt_split_butterfly}
+\begin{split}
+a_{2i} &= (A_i + B_i)\psi^{-2i} \bmod q \\
+a_{2i+1} &= (A_i - B_i)\psi^{-2i} \bmod q.
+\end{split}
+\end{equation}
+
+$A_i$와 $B_i$는 $n/2$ 포인트 INTT로 얻어질 수 있다는 점에 주목하자. 만약 $n$이 2의 거듭제곱이라면, 이 과정은 모든 계수에 대해 반복될 수 있다. 그림 4는 방정식 \ref{equ:intt_split_butterfly}의 시각화를 보여주며, 이는 제안자인 젠틀맨(Gentleman)과 샌드(Sande)를 참조하여 일반적으로 \textbf{GS 버터플라이(GS butterfly)}라고 불린다.
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+    \node (A) at (0, 0.5) {$A$};
+    \node (B) at (0, -0.5) {$B$};
+    \coordinate (A_1) at (1, 0.5);
+    \coordinate (A_2) at (2, 0.5);
+    \coordinate (A_3) at (3, 0.5);
+    \coordinate (B_1) at (1, -0.5);
+    \coordinate (B_2) at (2, -0.5);
+    \coordinate (B_3) at (3, -0.5);
+    \draw (A) -- (A_1);
+    \draw (A_1) -- (B_2);
+    \draw (B_2) -- (B_3);
+    \draw (B) -- (B_1);
+    \draw (B_1) -- (A_2);
+    \draw (A_2) -- (A_3);
+    \node at ([yshift=6pt]A_1) {$+$};
+    \node at ([yshift=-6pt]B_1) {$-$};
+    \node at ([yshift=-6pt]B_2) {$\psi^k$};
+\end{tikzpicture}
+\caption{Gentleman-Sande (GS) butterfly unit for calculating INTT}
+\label{fig:gs_butterfly}
+\end{figure}
+
+분리가 다르게 이루어지기 때문에, GS 버터플라이의 입력은 일반적으로 비트 역순(BO)이고 출력은 정상 순서(NO)이다.
+
+다항식 곱셈을 위해, CT 버터플라이를 사용하여 두 입력을 모두 NTT 도메인으로 변환한 다음, NTT 출력에 대해 원소별 곱셈을 사용할 수 있다. 그 결과는 INTT를 수행하기 위해 GS 버터플라이를 사용하여 다시 변환된다. 버터플라이가 수학적 연산을 준선형 규모로 줄여주기 때문에, 다항식 곱셈의 복잡도는 $O(n^2)$에서 $O(n \log n)$으로 감소한다. 다항식 차수가 높을수록 속도와 비용 이득이 커진다.
+
+\subsection{Normal Order and Bit-Reversed Order}
+
+\ref{sec:ct_algorithm}절과 \ref{sec:gs_algorithm}절에서 다루었듯이, 일반적으로 CT 버터플라이의 입력은 정상 순서(NO)이고 출력은 비트 역순(BO)이다. 반대로 GS 버터플라이의 입력은 BO이고 출력은 NO이다.
+\begin{tcolorbox}[colback=white, boxrule=0.7pt, sharp corners]
+\begin{definition}
+$n$이 2의 거듭제곱이고, $b$가 $b < n$인 음이 아닌 정수라고 하자. $b$의 \textbf{비트 역전(bit-reversal)}은 다음과 같이 정의된다.
+\begin{equation}
+\begin{split}
+\text{brv}_n (b_{\log n-1} 2^{\log n-1} + \dots + b_1 2 + b_0) \\
+= b_0 2^{\log n-1} + \dots + b_{\log n-2} 2 + b_{\log n-1}.
+\end{split}
+\end{equation}
+여기서 $b_i$는 $b$의 이진 전개(binary expansion)의 $i$번째 비트이다.
+\end{definition}
+\end{tcolorbox}
+
+일반적인 NTT-CT 버터플라이 구성은 NO 입력 및 BO 출력인 반면, INTT-GS 구성은 일반적으로 BO 입력 및 NO 출력을 갖는다. 하지만 CT 버터플라이를 재구성하여 BO 입력 및 NO 출력을 갖도록 할 수 있고, GS 버터플라이를 재구성하여 NO 입력 및 BO 출력을 갖도록 할 수 있다.
+
+정상 순서를 NTT 입력으로 사용하는 것은 \textbf{시간 영역 간소화(decimation in time)}라고 불리는 반면, 비트 역순 입력을 사용하는 것은 \textbf{주파수 영역 간소화(decimation in frequency)}라고 불린다.
+
+주목해야 할 또 다른 점은 $\psi$의 거듭제곱이 비트 역순 인덱스를 따른다는 것이다. $\psi$의 모든 거듭제곱을 \textbf{트위들 인자(twiddle factors)}라고 한다.
